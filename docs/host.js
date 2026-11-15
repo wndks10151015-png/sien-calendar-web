@@ -203,7 +203,13 @@ export function createBrowserApp(root){
   workspace.setActiveLeaf=leaf=>workspace.revealLeaf(leaf);
   workspace.getLeaf=()=>{
     const leaf={app,containerEl:root,contentEl:root.createDiv({cls:"view-content"}),type:"empty",getRoot:()=>workspace,
-      async setViewState({type,state}){leaf.type=type;leaf.view=app.views.get(type)(leaf);await leaf.view.load();if(state)await leaf.view.setState(state);workspace.activeLeaf=leaf;await leaf.view.onOpen();},
+      async setViewState({type,state}){
+        if(leaf.view&&leaf.type===type){if(state)await leaf.view.setState(state);workspace.activeLeaf=leaf;return;}
+        const create=app.views.get(type);if(!create)throw new Error('지원하지 않는 보기입니다.');
+        if(leaf.view){await leaf.view.onClose?.();leaf.view.unload();}
+        leaf.contentEl.replaceChildren();leaf.type=type;leaf.view=create(leaf);await leaf.view.load();
+        if(state)await leaf.view.setState(state);workspace.activeLeaf=leaf;await leaf.view.onOpen();
+      },
       async openFile(file){return workspace.openLinkText(file.path);},
       async detach(){await leaf.view?.onClose?.();leaf.view?.unload();leaf.contentEl.remove();workspace.leaves=workspace.leaves.filter(l=>l!==leaf);},
     };workspace.leaves.push(leaf);return leaf;

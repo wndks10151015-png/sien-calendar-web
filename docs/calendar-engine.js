@@ -1,5 +1,6 @@
 import * as browserRuntime from "./host.js";
 import {equalizePeriodLanes} from "./layout.js";
+import {CONNECTION_SIDES,validConnectionSides,writeConnectionSides,connectionPath,installCanvasConnections} from "./project-connections.js";
 const {
   Plugin,
   ItemView,
@@ -28014,12 +28015,12 @@ function installProjectFeatures(deps) {
         const a=graph.nodes.get(edge.from),b=graph.nodes.get(edge.to);
         const x=a.x+(compact&&completed(this,a.item)?10:a.width||cardWidth),y=a.y+(a.height||cardHeight)/2;
         const tx=b.x,ty=b.y+(b.height||cardHeight)/2,dx=Math.max(24,Math.abs(tx-x)/2);
-        const d=`M${x},${y} C${x+dx},${y} ${tx-dx},${ty} ${tx},${ty}`;edge.path.setAttribute('d',d);edge.hit?.setAttribute('d',d);
+        const d=compact?`M${x},${y} C${x+dx},${y} ${tx-dx},${ty} ${tx},${ty}`:connectionPath(a,b,project.id);edge.path.setAttribute('d',d);edge.hit?.setAttribute('d',d);
       }
       connectionUI?.paint();
     };
     paintEdges();
-    if(!compact)for(const edge of paths){const hit=edge.path.cloneNode();edge.hit=hit;hit.classList.add('sien-project-edge-hit');hit.setAttribute('role','button');hit.setAttribute('tabindex','0');hit.setAttribute('aria-label',`${graph.nodes.get(edge.from).item.title} → ${graph.nodes.get(edge.to).item.title} 연결 메뉴`);const menu=event=>{connectionUI?.select(edge,event);this.openProjectEdgeMenu(event,project,graph.nodes.get(edge.from).item,graph.nodes.get(edge.to).item);};hit.addEventListener('pointerenter',()=>connectionUI?.select(edge));hit.addEventListener('click',menu);hit.addEventListener('contextmenu',menu);hit.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){const r=hit.getBoundingClientRect();menu({preventDefault:()=>event.preventDefault(),stopPropagation:()=>event.stopPropagation(),clientX:r.x+r.width/2,clientY:r.y+r.height/2});}});svg.appendChild(hit);}
+    if(!compact)for(const edge of paths){const hit=edge.path.cloneNode();edge.hit=hit;hit.classList.add('sien-project-edge-hit');hit.setAttribute('role','button');hit.setAttribute('tabindex','0');hit.setAttribute('aria-pressed','false');hit.setAttribute('aria-label',`${graph.nodes.get(edge.from).item.title} → ${graph.nodes.get(edge.to).item.title} 연결 선택`);svg.appendChild(hit);}
     for(const node of graph.nodes.values()) {
       const savedPosition=node.item[POSITIONS]?.[project.id];
       node.autoRow=!compact&&savedPosition?.layoutKey===graph.layoutKey&&Number.isFinite(savedPosition.x)&&Number.isFinite(savedPosition.y)?null:(node.y-24)/layoutOptions.rowHeight;
@@ -28226,6 +28227,7 @@ function installProjectConnectionData({ SienCalendarView, Notice, itemManualOrde
   const membersOf = (view, items, project) => items.filter(item => editable(item) && view.projectMembership(item).includes(project.id));
   const validate = (view, project, from, to, options, items) => {
     if (!project?.id) return { error: '프로젝트를 선택해주세요.' };
+    if (options.sides && !validConnectionSides(options.sides)) return { error: '연결할 카드 가장자리를 다시 선택해주세요.' };
     const byId = new Map(items.filter(item => !item.deletedAt).map(item => [keyOf(item), item]));
     const fromId = keyOf(from), toId = keyOf(to), old = options.replace || (options.remove ? { from, to } : null);
     const oldFrom = old ? keyOf(old.from) : '', oldTo = old ? keyOf(old.to) : '';
@@ -28238,7 +28240,7 @@ function installProjectConnectionData({ SienCalendarView, Notice, itemManualOrde
     if (old && !shownOld && !graph.edges.some(edge => matches(edge, oldFrom, oldTo))) return { error: '연결이 변경되었습니다. 최신 연결에서 다시 시도해주세요.' };
     if (!options.remove) {
       if (fromId === toId) return { error: '자기 자신에는 연결할 수 없습니다.' };
-      if ((old && fromId === oldFrom && toId === oldTo) || graph.edges.some(edge => matches(edge, fromId, toId) && !matches(edge, oldFrom, oldTo))) return { error: '이미 연결된 일정입니다.' };
+      if ((old && fromId === oldFrom && toId === oldTo && !options.sides) || graph.edges.some(edge => matches(edge, fromId, toId) && !matches(edge, oldFrom, oldTo))) return { error: '이미 연결된 일정입니다.' };
       const outgoing = new Map();
       const add = (a, b) => { if (a === oldFrom && b === oldTo) return; if (!outgoing.has(a)) outgoing.set(a, []); outgoing.get(a).push(b); };
       for (const edge of graph.edges) add(edge.from, edge.to);
@@ -28269,14 +28271,14 @@ function installProjectConnectionData({ SienCalendarView, Notice, itemManualOrde
       if (start.error) { new Notice(start.error); return false; }
       const expected = new Map(start.members.map(item => [storageKey(item), {
         revision: Number(item.revision || 0),
-        graph: structuredClone([item[DEPENDENCIES], item[DISCONNECTED], item[BRANCHES], item[POSITIONS]]),
+        graph: structuredClone([item[DEPENDENCIES], item[DISCONNECTED], item[BRANCHES], item[POSITIONS], item[CONNECTION_SIDES]]),
       }]));
       const shown = (this.activeProjectId === project.id ? [...(this.projectCurrentGraph?.nodes?.values() || [])] : [])
         .filter(node => expected.has(storageKey(node.item)))
         .map(node => ({ id: node.id, item: structuredClone(node.item), x: node.x, y: node.y }));
       if (shown.some(node => {
         const live = start.byId.get(node.id);
-        return !live || !same(node.item[POSITIONS], live[POSITIONS]) || !same(node.item[DEPENDENCIES], live[DEPENDENCIES]) || !same(node.item[BRANCHES], live[BRANCHES]) || !same(node.item[DISCONNECTED], live[DISCONNECTED]);
+        return !live || !same(node.item[POSITIONS], live[POSITIONS]) || !same(node.item[DEPENDENCIES], live[DEPENDENCIES]) || !same(node.item[BRANCHES], live[BRANCHES]) || !same(node.item[DISCONNECTED], live[DISCONNECTED]) || !same(node.item[CONNECTION_SIDES], live[CONNECTION_SIDES]);
       })) { new Notice('일정 배치가 변경되었습니다. 화면을 새로 확인한 뒤 연결해주세요.'); return false; }
       const outcome = await plugin.mutateInternalData(document => {
         const all = Object.entries(document.items).map(([key, item]) => plugin.hydrateInternalItem(item, key));
@@ -28284,7 +28286,7 @@ function installProjectConnectionData({ SienCalendarView, Notice, itemManualOrde
         if (current.error) return { changed: false, result: { error: current.error } };
         if (current.members.length !== expected.size || current.members.some(item => {
           const prior = expected.get(storageKey(item));
-          return !prior || prior.revision !== Number(item.revision || 0) || !same(prior.graph, [item[DEPENDENCIES], item[DISCONNECTED], item[BRANCHES], item[POSITIONS]]);
+          return !prior || prior.revision !== Number(item.revision || 0) || !same(prior.graph, [item[DEPENDENCIES], item[DISCONNECTED], item[BRANCHES], item[POSITIONS], item[CONNECTION_SIDES]]);
         })) return { changed: false, result: { error: '다른 편집이나 동기화로 일정이 변경되었습니다. 다시 연결해주세요.' } };
         const updates = new Map();
         const draft = id => {
@@ -28295,12 +28297,14 @@ function installProjectConnectionData({ SienCalendarView, Notice, itemManualOrde
         const incoming = id => current.graph.edges.filter(edge => edge.to === id && !(edge.from === current.oldFrom && edge.to === current.oldTo)).map(edge => edge.from);
         if (current.old) {
           const target = draft(current.oldTo);
+          writeConnectionSides(target, project.id, current.oldFrom, null);
           target[DEPENDENCIES] = [...new Set([...parents(target).filter(id => id !== current.oldFrom), ...incoming(current.oldTo)])];
           target[BRANCHES] = { ...target[BRANCHES], [project.id]: current.oldFrom };
           target[DISCONNECTED] = { ...target[DISCONNECTED], [project.id]: [...new Set([...(target[DISCONNECTED]?.[project.id] || []), current.oldFrom])] };
         }
         if (!options.remove) {
           const target = draft(current.toId);
+          if (options.sides) writeConnectionSides(target, project.id, current.fromId, options.sides);
           target[DEPENDENCIES] = [...new Set([...parents(target), ...incoming(current.toId), current.fromId])];
           target[BRANCHES] = { ...target[BRANCHES], [project.id]: current.fromId };
           target[DISCONNECTED] = { ...target[DISCONNECTED], [project.id]: (target[DISCONNECTED]?.[project.id] || []).filter(id => id !== current.fromId) };
@@ -28338,202 +28342,7 @@ function installProjectConnectionData({ SienCalendarView, Notice, itemManualOrde
 module.exports = { installProjectConnectionData };
 
 return module.exports;})().installProjectConnectionData({...projectFeatureDependencies,...projectFeatures});
-(()=>{const module={exports:{}};
-function projectConnectionHandlePoints(a,b,nodes,zoom,bounds) {
-  const size=44/zoom,half=size/2,pad=2/zoom,icon=7/zoom,dx=Math.max(24,Math.abs(b.x-a.x)/2);
-  const at=t=>{const u=1-t;return{x:u*u*u*a.x+3*u*u*t*(a.x+dx)+3*u*t*t*(b.x-dx)+t*t*t*b.x,y:u*u*u*a.y+3*u*u*t*a.y+3*u*t*t*b.y+t*t*t*b.y};};
-  const middle=at(.5),overlap=(a,b)=>a.left<b.right+pad&&a.right>b.left-pad&&a.top<b.bottom+pad&&a.bottom>b.top-pad;
-  const ports=[],cards=[];
-  for(const node of nodes){const w=node.width||216,h=node.height||132,y=node.y+h/2;cards.push({left:node.x,right:node.x+w,top:node.y,bottom:node.y+h});for(const x of [node.x,node.x+w])ports.push({left:x-icon,right:x+icon,top:y-icon,bottom:y+icon});}
-  const clamp=p=>({x:Math.max(bounds.left,Math.min(p.x,bounds.right)),y:Math.max(bounds.top,Math.min(p.y,bounds.bottom))});
-  const rect=(p,r=half)=>({left:p.x-r,right:p.x+r,top:p.y-r,bottom:p.y+r}),chosen=[],result={};
-  for(const [end,t,sign]of [['from',.25,-1],['to',.75,1]]){
-    const anchor=at(t),candidates=[clamp(anchor)];
-    for(const offset of [32,40,48,64,96,128,192])for(const direction of [sign,-sign])candidates.push(clamp({x:middle.x,y:middle.y+direction*offset/zoom}));
-    // Short wires have no room for two touch targets on the line itself.
-    const free=(p,avoidCards)=>!ports.some(r=>overlap(rect(p),r))&&!chosen.some(q=>overlap(rect(p),rect(q)))&&(!avoidCards||!cards.some(r=>overlap(rect(p,icon),r)));
-    const point=candidates.find(p=>free(p,true))||candidates.find(p=>free(p,false))||clamp(anchor);
-    chosen.push(point);result[end]={...point,anchor};
-  }
-  return result;
-}
-
-function installProjectConnectionUI({SienCalendarView,itemManualOrderKey}) {
-  const P=SienCalendarView.prototype;
-  const escapeBack=P.handleEscapeBackEvent;
-  P.handleEscapeBackEvent=function(event,...args){
-    if(event?.key==='Escape'&&(this.projectConnectionActive||this.projectConnectionSelected)&&!event.isComposing&&(event.__sienProjectNativeMenuEscape||this.nativeEscapeOwner?.(null,event.target,this.containerEl?.ownerDocument?.activeElement))){event.__sienProjectNativeMenuEscape=true;return false;}
-    if(event?.key==='Escape'&&(this.projectConnectionActive||this.projectConnectionSelected)&&!this.nativeEscapeOwner?.(null,event.target,this.containerEl?.ownerDocument?.activeElement)){
-      this.projectConnectionEscape?.();this.claimEscapeBackEvent(event);return true;
-    }
-    return escapeBack.call(this,event,...args);
-  };
-  P.mountProjectConnections=function({project,graph,canvas,svg,paths,parent}) {
-    this.projectConnectionCleanup?.();
-    const doc=canvas.ownerDocument,win=doc.defaultView,viewport=canvas.closest('.sien-project-scroll')||parent;
-    const hint=viewport.createDiv({cls:'sien-project-connection-hint',attr:{role:'status','aria-live':'polite'}});
-    hint.hidden=true;
-    let state=null,selected=null,handles=[],guides=[],handleGeometryKey='',frame=null,disposed=false,hintAnchor=null;
-    const positionHint=()=>{
-      if(!hintAnchor||hint.hidden)return;
-      const r=viewport.getBoundingClientRect(),c=canvas.getBoundingClientRect(),zoom=this.projectCameras.get(project.id)?.zoom||1,h=hint.getBoundingClientRect();
-      const x=c.left+hintAnchor.x*zoom-r.left,y=c.top+hintAnchor.y*zoom-r.top;
-      hint.style.left=Math.max(8,Math.min(x-h.width/2,viewport.clientWidth-h.width-8))+'px';
-      const above=y-h.height-14;
-      hint.style.top=Math.max(8,Math.min(above>=8?above:y+14,viewport.clientHeight-h.height-8))+'px';
-    };
-    const point=(id,side)=>{const n=graph.nodes.get(id);return{x:n.x+(side==='right'?(n.width||216):0),y:n.y+(n.height||132)/2};};
-    const curve=(a,b)=>{const dx=Math.max(32,Math.abs(b.x-a.x)/2);return`M${a.x},${a.y} C${a.x+dx},${a.y} ${b.x-dx},${b.y} ${b.x},${b.y}`;};
-    const eventPoint=e=>{const r=canvas.getBoundingClientRect(),zoom=this.projectCameras.get(project.id)?.zoom||1;return{x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom};};
-    const hintText=text=>{if(hint.childElementCount===1&&hint.firstChild?.textContent===text)return;hint.empty();hint.hidden=!text;if(text)hint.createSpan({text});};
-    const targetAt=e=>{
-      const hit=doc.elementFromPoint(e.clientX,e.clientY),card=hit?.closest('.sien-project-node');
-      return graph.nodes.get(card?.dataset.itemId||hit?.closest('[data-node-id]')?.dataset.nodeId)||null;
-    };
-    const pair=node=>({from:state.end==='from'?node?.id:state.from,to:state.end==='to'?node?.id:state.to});
-    const permitted=node=>{
-      if(!node)return false;
-      if(!state.allowed.has(node.id)){const p=pair(node);state.allowed.set(node.id,!!(p.from&&p.to&&this.projectConnectionAllowed(project,graph.nodes.get(p.from)?.item,graph.nodes.get(p.to)?.item,{replace:state.replace})));}
-      return state.allowed.get(node.id);
-    };
-    const clearState=()=>{
-      if(!state)return;
-      state.preview.remove();state.source?.card.classList.remove('is-connecting');
-      state.target?.card.classList.remove('is-connection-target','is-connection-invalid');state=null;
-      if(frame!==null){win.cancelAnimationFrame(frame);frame=null;}
-      this.projectConnectionActive=false;canvas.classList.remove('is-connecting');hint.style.removeProperty('pointer-events');
-      hintText('');
-    };
-    const clearSelected=()=>{
-      if(selected){selected.path.classList.remove('is-selected');selected.hit.classList.remove('is-selected');selected.hit.setAttribute('aria-pressed','false');}
-      selected=null;handleGeometryKey='';this.projectConnectionSelected=false;for(const h of [...handles,...guides])h.remove();handles=[];guides=[];if(!state)hintText('');
-    };
-    const commit=async(from,to,options={})=>{
-      if(this.projectConnectionBusy)return;
-      this.projectConnectionBusy=true;
-      try{await this.updateProjectConnection(project,graph.nodes.get(from)?.item,graph.nodes.get(to)?.item,options);}
-      finally{this.projectConnectionBusy=false;}
-    };
-    const finish=node=>{
-      if(!state)return;
-      const current=state,p=pair(node),valid=permitted(node);clearState();
-      this.projectPanSuppressedUntil=Date.now()+300;
-      if(valid)void commit(p.from,p.to,{replace:current.replace});
-    };
-    const paint=()=>{
-      if(frame!==null)win.cancelAnimationFrame(frame);frame=null;
-      if(state){const target=state.target,p=pair(target),free=state.free;
-        const a=p.from?point(p.from,'right'):free,b=p.to?point(p.to,'left'):free;
-        state.preview.setAttribute('d',curve(a,b));
-      }
-      if(selected&&handles.length){
-        const zoom=this.projectCameras.get(project.id)?.zoom||1,c=canvas.getBoundingClientRect(),r=viewport.getBoundingClientRect(),margin=24/zoom;
-        const geometryKey=[selected.path.getAttribute('d'),zoom,c.left,c.top,r.left,r.top,r.right,r.bottom].join('|');
-        if(geometryKey!==handleGeometryKey){
-          const positions=projectConnectionHandlePoints(point(selected.from,'right'),point(selected.to,'left'),graph.nodes.values(),zoom,{left:(r.left-c.left)/zoom+margin,right:(r.right-c.left)/zoom-margin,top:(r.top-c.top)/zoom+margin,bottom:(r.bottom-c.top)/zoom-margin});
-          for(const [index,h]of handles.entries()){const p=positions[h.dataset.end],guide=guides[index];h.style.left=p.x+'px';h.style.top=p.y+'px';guide.setAttribute('x1',p.anchor.x);guide.setAttribute('y1',p.anchor.y);guide.setAttribute('x2',p.x);guide.setAttribute('y2',p.y);guide.setAttribute('visibility',Math.hypot(p.x-p.anchor.x,p.y-p.anchor.y)*zoom<1?'hidden':'visible');}
-          handleGeometryKey=geometryKey;
-        }
-      }
-      positionHint();
-    };
-    const schedule=()=>{if(frame===null)frame=win.requestAnimationFrame(paint);};
-    const updateTarget=(node,free)=>{
-      if(!state)return;
-      state.target?.card.classList.remove('is-connection-target','is-connection-invalid');state.target=node;state.free=free;hintAnchor=free;
-      const valid=node&&permitted(node);state.preview.classList.toggle('is-invalid',!!node&&!valid);
-      if(node){node.card.classList.add(valid?'is-connection-target':'is-connection-invalid');hintText(valid?'놓아서 연결 · Esc 취소':'자기 자신·중복·순환 연결은 만들 수 없습니다');}
-      else hintText(state.replace?'다른 일정에 놓아 재연결 · 빈 공간에 놓아 해제 · Esc 취소':state.from?'연결할 일정에 놓거나 빈 공간에서 일정 추가 · Esc 취소':'연결할 일정을 선택하세요 · Esc 취소');
-      schedule();
-    };
-    const begin=(event,config)=>{
-      if(this.projectConnectionBusy||event&&event.button!==0)return;
-      event?.preventDefault();event?.stopPropagation();event?.currentTarget?.focus?.({preventScroll:true});this.projectNodeMoveCleanup?.();this.closeDetailPopover();clearState();
-      const fixed=graph.nodes.get(config.end==='to'?config.from:config.to);
-      if(!fixed||fixed.item.readOnly||fixed.item._readOnly)return;
-      const preview=doc.createElementNS(svg.namespaceURI,'path');preview.classList.add('sien-project-connection-preview');svg.appendChild(preview);
-      state={...config,preview,source:fixed,target:null,pointer:event?.pointerId??null,start:event?{x:event.clientX,y:event.clientY}:null,moved:false,free:event?eventPoint(event):point(fixed.id,config.end==='to'?'right':'left'),allowed:new Map()};hintAnchor=state.free;
-      this.projectConnectionActive=true;fixed.card.classList.add('is-connecting');canvas.classList.add('is-connecting');hint.style.pointerEvents='none';
-      hintText('연결할 일정을 선택하세요 · Esc 취소');paint();
-    };
-    const portStart=(event,node,side)=>{
-      if(state?.pointer===null){event.preventDefault();event.stopPropagation();finish(node);return;}
-      clearSelected();
-      begin(event,side==='right'?{from:node.id,to:null,end:'to'}:{from:null,to:node.id,end:'from'});
-    };
-    for(const node of graph.nodes.values())for(const side of ['left','right']){
-      const port=node.card.createEl('button',{cls:'sien-project-port '+(side==='left'?'is-input':'is-output'),attr:{type:'button','data-side':side,'aria-label':`${node.item.title||'일정'} ${side==='left'?'선행':'후행'} 일정 연결`}});
-      port.disabled=!!(node.item.readOnly||node.item._readOnly);
-      port.addEventListener('pointerdown',event=>portStart(event,node,side));
-      port.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();});
-      port.addEventListener('keydown',event=>{if(event.key!=='Enter'&&event.key!==' ')return;event.preventDefault();event.stopPropagation();if(state)finish(node);else{clearSelected();begin(null,side==='right'?{from:node.id,to:null,end:'to'}:{from:null,to:node.id,end:'from'});}});
-    }
-    const select=(edge,event)=>{
-      if(state||selected===edge)return;
-      event?.preventDefault();event?.stopPropagation();clearState();clearSelected();selected=edge;this.projectConnectionSelected=true;
-      const a=point(edge.from,'right'),b=point(edge.to,'left');hintAnchor=event?.clientX||event?.clientY?eventPoint(event):{x:(a.x+b.x)/2,y:(a.y+b.y)/2};
-      edge.path.classList.add('is-selected');edge.hit.classList.add('is-selected');edge.hit.setAttribute('aria-pressed','true');
-      for(const end of ['from','to']){
-        const guide=doc.createElementNS(svg.namespaceURI,'line');guide.classList.add('sien-project-connection-guide');guide.setAttribute('aria-hidden','true');svg.appendChild(guide);guides.push(guide);
-        const handle=canvas.createEl('button',{cls:'sien-project-edge-endpoint',attr:{type:'button','data-end':end,'data-from':edge.from,'data-to':edge.to,'data-node-id':edge[end],'aria-label':end==='from'?'연결 시작점 이동':'연결 도착점 이동'}});
-        handles.push(handle);handle.addEventListener('pointerdown',event=>begin(event,{from:edge.from,to:edge.to,end,replace:{from:edge.from,to:edge.to}}));
-        handle.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();});
-        handle.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();begin(null,{from:edge.from,to:edge.to,end,replace:{from:edge.from,to:edge.to}});}});
-      }
-      hintText('');paint();
-    };
-    const move=event=>{
-      if(!state||state.pointer!==event.pointerId)return;
-      if(!state.moved&&Math.hypot(event.clientX-state.start.x,event.clientY-state.start.y)<5)return;
-      state.moved=true;event.preventDefault();updateTarget(targetAt(event),eventPoint(event));
-    };
-    const up=event=>{
-      if(!state||state.pointer!==event.pointerId)return;
-      if(!state.moved){state.pointer=null;return;}
-      const target=targetAt(event),current=state;
-      if(target){finish(target);return;}
-      const r=viewport.getBoundingClientRect(),inside=event.clientX>=r.left&&event.clientX<=r.right&&event.clientY>=r.top&&event.clientY<=r.bottom;
-      clearState();this.projectPanSuppressedUntil=Date.now()+300;
-      if(current.replace&&inside)void commit(current.replace.from,current.replace.to,{remove:true});
-      else if(inside&&current.from&&current.end==='to')this.openProjectAddMenu(event,project,graph.nodes.get(current.from).item);
-    };
-    const abort=()=>clearState();
-    const cancel=event=>{if(state?.pointer===event.pointerId)abort();};
-    const click=event=>{
-      if(!state||state.pointer!==null||event.target.closest('.sien-project-port,.sien-project-edge-endpoint'))return;
-      event.preventDefault();event.stopImmediatePropagation();const node=targetAt(event);if(node)finish(node);else clearState();
-    };
-    const down=event=>{
-      if(event.target.closest('.sien-project-edge-hit,.sien-project-port,.sien-project-edge-endpoint'))return;
-      if(!state)clearSelected();
-    };
-    const key=event=>{
-      if(event.__sienProjectNativeMenuEscape)return;
-      if(this.nativeEscapeOwner?.(null,event.target,doc.activeElement))return;
-      if(!state&&!canvas.contains(event.target)&&!hint.contains(event.target))return;
-      if(event.key==='Escape'&&(state||selected)){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation();clearState();clearSelected();return;}
-      if(selected&&!state&&(event.key==='Delete'||event.key==='Backspace')&&!event.target.closest('input,textarea,[contenteditable=true]')){event.preventDefault();event.stopImmediatePropagation();void commit(selected.from,selected.to,{remove:true});}
-    };
-    canvas.addEventListener('click',click,true);canvas.addEventListener('pointerdown',down);doc.addEventListener('keydown',key,true);
-    win.addEventListener('pointermove',move,{passive:false});win.addEventListener('pointerup',up);win.addEventListener('pointercancel',cancel);win.addEventListener('blur',abort);
-    this.projectConnectionDragCleanup=clearState;
-    this.projectConnectionEscape=()=>{clearState();clearSelected();};
-    this.projectConnectionReposition=paint;
-    const cleanup=()=>{
-      if(disposed)return;disposed=true;clearState();clearSelected();hint.remove();
-      for(const node of graph.nodes.values())for(const port of node.card.querySelectorAll('.sien-project-port'))port.remove();
-      canvas.removeEventListener('click',click,true);canvas.removeEventListener('pointerdown',down);doc.removeEventListener('keydown',key,true);
-      win.removeEventListener('pointermove',move);win.removeEventListener('pointerup',up);win.removeEventListener('pointercancel',cancel);win.removeEventListener('blur',abort);
-      if(this.projectConnectionCleanup===cleanup){this.projectConnectionCleanup=null;this.projectConnectionDragCleanup=null;this.projectConnectionEscape=null;this.projectConnectionReposition=null;}
-    };
-    this.projectConnectionCleanup=cleanup;
-    if(!this.projectConnectionRegistered){this.projectConnectionRegistered=true;this.register(()=>this.projectConnectionCleanup?.());}
-    return{paint,select};
-  };
-}
-module.exports={installProjectConnectionUI,projectConnectionHandlePoints};
-
-return module.exports;})().installProjectConnectionUI(projectFeatureDependencies);
+installCanvasConnections(projectFeatureDependencies);
 (()=>{const module={exports:{}};
 function collectResources(items,definitions){
   const links=new Map(),files=new Map(),notes=[];

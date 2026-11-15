@@ -7,3 +7,19 @@ body.sien-web{--sien-mobile-bottom-clearance:env(safe-area-inset-bottom,0px);--s
 body.sien-web #calendar .sien-header-add{align-items:center;white-space:nowrap}
 body.sien-web :is(.sien-day-cell,.sien-all-day-lane,.sien-weekdays){-webkit-user-select:none;user-select:none}
 body.sien-web :is(.sien-day-cell,.sien-all-day-lane) :is(input,textarea,[contenteditable=true]){-webkit-user-select:text;user-select:text}
+/* Canvas connections appear at the edge being used, never over card content. */
+body.sien-web .sien-canvas-connections .sien-project-port{top:auto;right:auto;bottom:auto;left:auto;width:var(--project-handle-size);min-width:var(--project-handle-size);height:var(--project-handle-size);transform:translate(-50%,-50%);pointer-events:none}
+body.sien-web .sien-canvas-connections .sien-project-port[data-side=top]{left:50%;top:0}
+body.sien-web .sien-canvas-connections .sien-project-port[data-side=right]{left:100%;top:50%}
+body.sien-web .sien-canvas-connections .sien-project-port[data-side=bottom]{left:50%;top:100%}
+body.sien-web .sien-canvas-connections .sien-project-port[data-side=left]{left:0;top:50%}
+body.sien-web .sien-canvas-connections .sien-project-port::before{left:50%;right:auto;width:calc(8px / var(--project-camera-zoom,1));height:calc(8px / var(--project-camera-zoom,1));border:0;background:currentColor;opacity:0;pointer-events:none}
+body.sien-web .sien-canvas-connections .sien-project-port:is(.is-port-visible,:focus-visible),body.sien-web .sien-canvas-connections .is-connection-selected .sien-project-port{pointer-events:auto}
+body.sien-web .sien-canvas-connections .sien-project-port:is(.is-port-visible,:focus-visible)::before,body.sien-web .sien-canvas-connections .is-connection-selected .sien-project-port::before{opacity:1}
+body.sien-web .sien-canvas-connections .sien-project-port:focus-visible::before{outline:2px solid currentColor;outline-offset:3px}
+body.sien-web .sien-canvas-connections .sien-project-edge-endpoint::before{width:calc(9px / var(--project-camera-zoom,1));height:calc(9px / var(--project-camera-zoom,1));border-width:calc(1.5px / var(--project-camera-zoom,1))}
+body.sien-web .sien-canvas-connections .sien-project-edge-endpoint:focus-visible::before{outline:2px solid currentColor;outline-offset:3px}
+body.sien-web .sien-canvas-connections .sien-project-edges path.is-hovered:not(.sien-project-edge-hit){stroke-width:2.5px}
+body.sien-web .sien-canvas-connections .sien-project-node.is-connection-selected{outline:1px solid var(--project-outline,var(--project-color));outline-offset:3px}
+body.sien-web .sien-project-connection-hint{pointer-events:none}
+body.sien-web .sien-canvas-connections .sien-project-edges .is-reconnecting,body.sien-web .sien-canvas-connections.is-connecting .sien-project-edge-endpoint{opacity:0;pointer-events:none}
