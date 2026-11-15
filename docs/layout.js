@@ -1,15 +1,12 @@
-// A period joins its weekly lanes; connected lanes must share one height.
+// Share a period's own content height, never the height of unrelated lane cards.
 export function equalizePeriodLanes(lanes,pixelRatio=1){
-  const parent=lanes.map((_,i)=>i),firstLane=new Map();
-  const root=i=>{while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;};
-  lanes.forEach((lane,i)=>{
-    for(const {spanKey}of lane.measured){
-      if(!spanKey)continue;
-      if(firstLane.has(spanKey))parent[root(i)]=root(firstLane.get(spanKey));
-      else firstLane.set(spanKey,i);
-    }
-  });
   const heights=new Map(),scale=Number.isFinite(pixelRatio)&&pixelRatio>0?pixelRatio:1;
-  lanes.forEach((lane,i)=>{const key=root(i);heights.set(key,Math.max(heights.get(key)||20,lane.laneHeight));});
-  lanes.forEach((lane,i)=>{if(lane.measured.some(entry=>entry.spanKey))lane.laneHeight=Math.ceil(heights.get(root(i))*scale)/scale;});
+  for(const {measured}of lanes)for(const {spanKey,height}of measured){
+    if(spanKey)heights.set(spanKey,Math.max(heights.get(spanKey)||20,height));
+  }
+  lanes.forEach(lane=>{
+    for(const entry of lane.measured)if(entry.spanKey)entry.spanHeight=Math.ceil(heights.get(entry.spanKey)*scale)/scale;
+    // Spacers still reserve enough room for every card in their weekly lane.
+    lane.laneHeight=Math.max(lane.laneHeight||20,...lane.measured.map(entry=>entry.spanHeight??entry.height));
+  });
 }

@@ -1,5 +1,11 @@
 const assert=require('node:assert/strict');
 const replacements=[
+ ['unlimited month cards',`    // The month item cutoff follows the Obsidian app platform, not pane width:
+    // a narrow desktop pane must still show every item requested by the user.
+    const maxVisibleMonthItems = isObsidianMobileApp() ? 5 : null;`,`    // Every screen shows all schedules; weekly rows grow with their contents.
+    const maxVisibleMonthItems = null;`],
+ ['period card metrics','      for (const { element, height } of measured) {','      for (const { element, height, spanHeight } of measured) {'],
+ ['compact month period cards','          element.style?.setProperty?.("--sien-month-lane-height", `${laneHeight}px`);','          const cardHeight = isSpanningFragment && element.parentElement?.classList?.contains("sien-cell-items")\n            ? spanHeight ?? height : laneHeight;\n          element.style?.setProperty?.("--sien-month-lane-height", `${cardHeight}px`);'],
  ['browser layout helper','import * as browserRuntime from "./host.js";','import * as browserRuntime from "./host.js";\nimport {equalizePeriodLanes} from "./layout.js";'],
  ['retained month fragments','  syncMonthWeekLaneHeights(cells = []) {',`  syncMonthWeekLaneHeights(cells = []) {
     if (cells.some(cell => cell.classList?.contains("sien-day-cell"))) {

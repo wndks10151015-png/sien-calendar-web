@@ -12403,12 +12403,14 @@ class SienCalendarView extends ItemView {
     // these reads and writes forced the browser to lay out the full calendar
     // again for each row, even though the rows have independent heights.
     for (const { measured, laneHeight } of measuredLanes) {
-      for (const { element, height } of measured) {
+      for (const { element, height, spanHeight } of measured) {
         const isSpacer = element.classList?.contains?.("sien-item-spacer");
         const isSpanningFragment = element.dataset?.monthSpan === "true";
         if (isSpacer || isSpanningFragment) {
           element.classList?.add?.("is-month-lane-stretched");
-          element.style?.setProperty?.("--sien-month-lane-height", `${laneHeight}px`);
+          const cardHeight = isSpanningFragment && element.parentElement?.classList?.contains("sien-cell-items")
+            ? spanHeight ?? height : laneHeight;
+          element.style?.setProperty?.("--sien-month-lane-height", `${cardHeight}px`);
         } else if (
           element.parentElement?.classList?.contains?.("sien-all-day-lane")
           && laneHeight - height > 0.01
@@ -19751,9 +19753,8 @@ class SienCalendarView extends ItemView {
     // All schedules participate in one sorted weekly lane map. A range must
     // keep one lane across the row to remain a connected period bar; sorting
     // its fragments independently per date turns it into detached cards.
-    // The month item cutoff follows the Obsidian app platform, not pane width:
-    // a narrow desktop pane must still show every item requested by the user.
-    const maxVisibleMonthItems = isObsidianMobileApp() ? 5 : null;
+    // Every screen shows all schedules; weekly rows grow with their contents.
+    const maxVisibleMonthItems = null;
     const monthLayout = this.buildMonthLayout(items, start, maxVisibleMonthItems, totalDays / 7);
     const renderedWeeks = Array.from({ length: totalDays / 7 }, () => []);
     const pendingWeeks = grid.ownerDocument.createDocumentFragment();
