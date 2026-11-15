@@ -44,3 +44,14 @@ test("synchronization commit metadata does not block independent edits",()=>{
   const m=mergeDocuments(b,l,r);assert.equal(m.conflicts.length,0);assert.equal(m.document.config._commitId,"new-b");
 });
 test("nested prototype-pollution payloads are rejected",()=>assert.throws(()=>validateDocument(JSON.parse('{"schemaVersion":11,"config":{"__proto__":{"polluted":true}}}'))));
+
+test("independent fields of the same saved view merge by stable identity",()=>{
+  const b=base();b.config.savedViews=[{id:"all",name:"All",sort:"title",filters:[]}];
+  const l=structuredClone(b),r=structuredClone(b);l.config.savedViews[0].name="Renamed";r.config.savedViews[0].sort="date";
+  const m=mergeDocuments(b,l,r);assert.deepEqual(m.conflicts,[]);assert.equal(m.document.config.savedViews[0].name,"Renamed");assert.equal(m.document.config.savedViews[0].sort,"date");
+});
+test("independent saved-view additions and deletions preserve other views",()=>{
+  const b=base();b.config.savedViews=[{id:"all",name:"All"},{id:"old",name:"Old"}];
+  const l=structuredClone(b),r=structuredClone(b);l.config.savedViews.pop();r.config.savedViews.push({id:"new",name:"New"});
+  const m=mergeDocuments(b,l,r);assert.deepEqual(m.conflicts,[]);assert.deepEqual(m.document.config.savedViews.map(v=>v.id),["all","new"]);
+});

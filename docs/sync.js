@@ -1,5 +1,6 @@
 import {readState,writeState,readDocument,writeDocument,withLock} from "./store.js";
-import {mergeDocuments,canonical,validateDocument} from "./merge.js";
+import {mergeDocuments,canonical,validateDocument,resolveConflict} from "./merge.js";
+import {sharedDocument,retainDeviceViewState,withSharedViewModes} from "./view-state.js";
 
 const API="https://api.github.com";
 const encode=value=>{const bytes=new TextEncoder().encode(JSON.stringify(value));let text="";for(let i=0;i<bytes.length;i+=8192)text+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(text);};
@@ -14,7 +15,7 @@ export class GitHubSync extends EventTarget {
   #retryAt=0;
   constructor(){
     super();this.status="이 기기에 저장";this.state="local";
-    window.addEventListener("calendar-document-saved",e=>{if(!e.detail?.remote)this.schedule();});
+    window.addEventListener("calendar-document-saved",e=>{if(!e.detail?.remote)void this.scheduleSavedDocument().catch(()=>this.schedule());});
     window.addEventListener("online",()=>this.schedule(500));
     window.addEventListener("focus",()=>this.schedule(700));
     document.addEventListener("visibilitychange",()=>{if(!document.hidden)this.schedule(700);});
@@ -44,6 +45,11 @@ export class GitHubSync extends EventTarget {
   }
   async unlock(token){this.#token=token;this.#settings=await readState("connection");if(!this.#settings)throw new Error("저장된 연결 정보가 없습니다.");this.schedule(200);}
   lock(){this.#token="";clearTimeout(this.#timer);this.setStatus("locked","잠김");}
+  async scheduleSavedDocument(){
+    if(!this.#token)return;
+    const base=await readState("sync-base");
+    if(!base||canonical(sharedDocument(await readDocument(),base))!==canonical(sharedDocument(base)))this.schedule();
+  }
   schedule(delay=1800){
     if(!this.#token)return;
     clearTimeout(this.#timer);this.#timer=setTimeout(()=>void this.sync().catch(()=>{}),delay);
@@ -88,23 +94,22 @@ export class GitHubSync extends EventTarget {
         if(file&&file.type!=="file")throw new Error("일정 파일이 아닌 경로입니다.");
         if(file?.size>20*1024*1024)throw new Error("원격 일정 파일이 앱의 20MB 한도를 넘어 읽기를 보류했습니다.");
         const remote=file?(file.encoding==="base64"?decode(file.content):validateDocument(await this.request(path+"?ref="+encodeURIComponent(this.#settings.branch),{headers:{Accept:"application/vnd.github.raw+json"}}))):{schemaVersion:11};
-        const savedBase=await readState("sync-base"),base=savedBase||{schemaVersion:11};
-        const before=await readDocument();
-        let merged=!savedBase&&file&&!Object.keys(before).some(k=>k.startsWith("item:"))?{document:structuredClone(remote),conflicts:[]}:mergeDocuments(base,before,remote);
+        const savedBase=await readState("sync-base"),base=sharedDocument(savedBase||{schemaVersion:11});
+        const before=await readDocument(),local=sharedDocument(before,base),remoteShared=sharedDocument(remote);
+        const adopting=!savedBase&&file&&!Object.keys(before).some(k=>k.startsWith("item:"));
+        let merged=adopting?{document:remoteShared,conflicts:[]}:mergeDocuments(base,local,remoteShared);
         if(merged.conflicts.length){
           if(!interactive||!this.#resolver){this.setStatus("conflict","충돌 확인 필요 · 기기에 보관");return;}
           const selected=await this.#resolver(merged.conflicts);
           if(!selected){this.setStatus("conflict","충돌 확인 필요 · 기기에 보관");return;}
           // User explicitly resolves the conflicting fields; independent edits stay merged.
           for(const [index,conflict]of merged.conflicts.entries()){
-            let parent=merged.document;
-            for(const key of conflict.path.slice(0,-1))parent=parent[key];
-            const key=conflict.path.at(-1),value=selected[index]==="remote"?conflict.remote:conflict.local;
-            if(value===undefined)delete parent[key];else Object.defineProperty(parent,key,{value:structuredClone(value),writable:true,configurable:true,enumerable:true});
+            resolveConflict(merged.document,conflict.path,selected[index]==="remote"?conflict.remote:conflict.local);
           }
         }
-        if(canonical(merged.document)!==canonical(remote)){
-          const content=encode(merged.document);
+        const payload=withSharedViewModes(merged.document,remote,before);
+        if(canonical(payload)!==canonical(remote)){
+          const content=encode(payload);
           if(content.length>Math.floor(20*1024*1024*4/3))throw new Error("일정 파일이 20MB를 넘어 동기화를 보류했습니다. 내보내기로 보관 후 파일 분할이 필요합니다.");
           try{
             await this.assertPrivate();
@@ -113,10 +118,11 @@ export class GitHubSync extends EventTarget {
         }
         await withLock("sien-calendar-write",async()=>{
           const latest=await readDocument();
-          const pending=mergeDocuments(before,latest,merged.document);
+          const pending=mergeDocuments(local,sharedDocument(latest,local),merged.document);
           if(pending.conflicts.length)throw new Error("저장 중 추가 편집이 있어 기기의 변경사항을 유지했습니다. 다시 동기화해 주세요.");
           await writeState("sync-base",merged.document);
-          if(canonical(latest)!==canonical(pending.document))await writeDocument(pending.document,{remote:true});
+          const next=retainDeviceViewState(pending.document,adopting?{}:latest,payload);
+          if(canonical(latest)!==canonical(next))await writeDocument(next,{remote:true});
           if(canonical(pending.document)!==canonical(merged.document))setTimeout(()=>this.schedule(),0);
         });
         this.#lastPull=Date.now();await writeState("last-sync",this.#lastPull);
