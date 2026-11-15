@@ -1,7 +1,8 @@
 const ROOT=new URL("./",self.location).pathname;
 const PREFIX="sien-calendar:"+ROOT+":";
-const CACHE=PREFIX+"web-0.1.1";
+const CACHE=PREFIX+"web-0.1.2";
 const FILES=["./","./index.html","./app.js","./host.js","./navigation.js","./store.js","./sync.js","./merge.js","./calendar-engine.js","./calendar.css","./theme.css","./web.css","./icon.svg","./manifest.webmanifest","./assets/lucide.js","./assets/fonts/PretendardVariable.woff2"];
+FILES.push("./assets/icon-192.png","./assets/icon-512.png");
 const ASSETS=new Set(FILES.map(file=>new URL(file,self.location).pathname));
 self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener("activate",event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith(PREFIX)&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
