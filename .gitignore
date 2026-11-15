@@ -1,0 +1,11 @@
+node_modules/
+.env*
+!.env.example
+*.local.*
+*.log
+private/
+data.json
+calendar.json
+qa/
+playwright-report/
+test-results/
