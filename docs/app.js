@@ -166,6 +166,7 @@ document.getElementById("web-files").addEventListener("click",()=>{
 addEventListener("pagehide",()=>{void plugin?.flushOpenDetailSaves().catch(()=>{});});
 if(navigator.storage?.persist)navigator.storage.persist().catch(()=>{});
 const settings=await sync.initialize(),vault=await readState("credential");
+sync.setStatus(settings&&vault?"locked":"local",settings&&vault?"잠금 해제":"GitHub 연결");
 if(settings&&vault){
   root.replaceChildren();const lock=root.createDiv({cls:"web-locked"}),content=lock.createDiv();content.createEl("p",{text:"저장된 캘린더 연결을 잠금 해제해 주세요."});button(content,"잠금 해제",()=>void connectionDialog(),true);void connectionDialog();
 }else await startCalendar();
