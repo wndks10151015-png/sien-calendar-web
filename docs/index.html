@@ -16,12 +16,13 @@
   <script src="./assets/lucide.js" defer></script>
   <script type="module" src="./app.js"></script>
 </head>
-<body class="theme-dark">
+<body class="theme-dark sien-web">
   <div class="web-app-bar">
     <span class="web-app-name">Sien Calendar</span>
     <div class="web-app-actions">
       <button id="web-theme" type="button" aria-label="밝은 테마로 변경"></button>
-      <button id="web-files" type="button" aria-label="파일 보관함"></button>
+      <!-- Compatibility anchor while cached v0.1.3 clients install the update. -->
+      <span id="web-files" hidden aria-hidden="true"></span>
       <button id="web-settings" type="button" aria-label="캘린더 설정"></button>
       <button id="web-sync" type="button" aria-label="기기 동기화"><span class="web-sync-dot"></span><span id="web-sync-label">GitHub 연결</span></button>
     </div>

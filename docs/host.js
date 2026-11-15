@@ -186,7 +186,7 @@ class Emitter{
   trigger(name,...args){for(const callback of this.events.get(name)||[])callback(...args);}
 }
 export function createBrowserApp(root){
-  const workspace=new Emitter(),vault=new Emitter(),files=new Map(),scopes=[],app={workspace,vault,views:new Map(),protocols:new Map(),scope:new Scope(),commands:{commands:{}},keymap:{pushScope(scope){scopes.push(scope);},popScope(scope){const index=scopes.lastIndexOf(scope);if(index>=0)scopes.splice(index,1);}},isMobile:matchMedia("(pointer:coarse)").matches};
+  const workspace=new Emitter(),vault=new Emitter(),files=new Map(),scopes=[],app={workspace,vault,views:new Map(),protocols:new Map(),scope:new Scope(),commands:{commands:{}},keymap:{pushScope(scope){scopes.push(scope);},popScope(scope){const index=scopes.lastIndexOf(scope);if(index>=0)scopes.splice(index,1);}},get isMobile(){return document.body.classList.contains("is-mobile");},supportsAttachments:false};
   document.addEventListener("keydown",event=>{
     for(const scope of [...scopes].reverse())for(const binding of scope.handlers){
       if(binding.key.toLowerCase()!==event.key.toLowerCase())continue;

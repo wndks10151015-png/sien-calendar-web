@@ -1,7 +1,7 @@
 const ROOT=new URL("./",self.location).pathname;
 const PREFIX="sien-calendar:"+ROOT+":";
-const CACHE=PREFIX+"web-0.1.3";
-const FILES=["./","./index.html","./app.js","./host.js","./navigation.js","./store.js","./sync.js","./merge.js","./calendar-engine.js","./calendar.css","./theme.css","./web.css","./icon.svg","./manifest.webmanifest","./assets/lucide.js","./assets/fonts/PretendardVariable.woff2"];
+const CACHE=PREFIX+"web-0.1.4";
+const FILES=["./","./index.html","./app.js","./host.js","./navigation.js","./store.js","./sync.js","./merge.js","./layout.js","./calendar-engine.js","./calendar.css","./theme.css","./web.css","./icon.svg","./manifest.webmanifest","./assets/lucide.js","./assets/fonts/PretendardVariable.woff2"];
 FILES.push("./assets/icon-192.png","./assets/icon-512.png");
 const ASSETS=new Set(FILES.map(file=>new URL(file,self.location).pathname));
 self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES)).then(()=>self.skipWaiting())));

@@ -1,4 +1,5 @@
 import * as browserRuntime from "./host.js";
+import {equalizePeriodLanes} from "./layout.js";
 const {
   Plugin,
   ItemView,
@@ -12318,6 +12319,10 @@ class SienCalendarView extends ItemView {
   }
 
   syncMonthWeekLaneHeights(cells = []) {
+    if (cells.some(cell => cell.classList?.contains("sien-day-cell"))) {
+      // A newly appended week can continue a period in an already cached row.
+      cells = [...this.contentEl.querySelectorAll(".sien-day-cell[data-month-week]")];
+    }
     const spanWeeks = new Set(cells.filter(cell => cell.classList?.contains("sien-day-cell") && cell.querySelector('[data-month-span="true"]')).map(cell => cell.dataset.monthWeek));
     cells = cells.filter(cell => !cell.classList?.contains("sien-day-cell") || spanWeeks.has(cell.dataset.monthWeek));
     if (!cells.length) return;
@@ -12341,8 +12346,11 @@ class SienCalendarView extends ItemView {
       dirty.push(...group);
       pendingCache.push([owner, { signature, elements }]);
     }
-    cells = dirty;
-    if (!cells.length) return;
+    const scopeOwners = [...groups.keys()];
+    const sameScope = this.monthLaneSyncOwners?.length === scopeOwners.length
+      && scopeOwners.every((owner, index) => owner === this.monthLaneSyncOwners[index]);
+    if (!dirty.length && sameScope) return;
+    this.monthLaneSyncOwners = scopeOwners;
     const laneElements = new Map();
     const monthSpanGroups = new Map();
     for (const cell of cells) {
@@ -12384,10 +12392,13 @@ class SienCalendarView extends ItemView {
       const measured = elements.map((element) => ({
         element,
         height: this.monthLaneElementHeight(element),
+        spanKey: element.dataset?.monthSpan === "true" ? String(element.dataset.monthSpanKey || "") : "",
       }));
       const laneHeight = Math.max(20, ...measured.map((entry) => entry.height));
       return { measured, laneHeight };
     });
+    const scale = Number(cells[0]?.closest?.(".sien-month-wrap")?.dataset?.mobileMonthZoom || 1);
+    equalizePeriodLanes(measuredLanes, (window.devicePixelRatio || 1) * scale);
     // Read every natural card height before stretching any lane. Interleaving
     // these reads and writes forced the browser to lay out the full calendar
     // again for each row, even though the rows have independent heights.
@@ -21143,7 +21154,7 @@ class SienCalendarView extends ItemView {
   }
 
   detailPropertyLayout() {
-    const definitions = [...this.plugin.allProperties().filter(p => p.key !== "title"), { key: "sienAttachments", type: "files" }];
+    const definitions = [...this.plugin.allProperties().filter(p => p.key !== "title"), ...(this.app.supportsAttachments === false ? [] : [{ key: "sienAttachments", type: "files" }])];
     const known = new Set(definitions.map(p => p.key)), seen = new Set(), stored = this.plugin.config.detailPropertyLayout;
     const layout = { top: [], bottom: [] };
     for (const section of ["top", "bottom"]) for (const key of stored?.[section] || []) {
@@ -28674,7 +28685,7 @@ function installProjectTools(deps){
   P.renderProjectAttachmentEditor=function(parent,item){parent.empty();for(const file of item.sienAttachments||[]){const row=parent.createDiv({cls:'sien-project-file-row'});button(row,file,()=>{if(this.app.vault.getAbstractFileByPath(file))this.app.workspace.openLinkText(file,'',true);else new Notice('보관함에서 파일을 찾을 수 없습니다.');});const remove=button(row,'',async()=>{if(await this.saveProjectValue(item,{key:'sienAttachments',name:'파일'},item.sienAttachments.filter(path=>path!==file)))this.renderProjectAttachmentEditor(parent,item);});remove.setAttribute('aria-label',`${file} 연결 해제`);setIcon(remove,'x');}button(parent,'파일 추가',()=>new AttachmentPicker(this,item,()=>this.renderProjectAttachmentEditor(parent,item)).open());};
   const renderDetails=P.renderDetails;
   P.renderDetails=function(panel){
-    renderDetails.call(this,panel);const item=this.selectedItem(),properties=panel.querySelector('.sien-properties');if(!item||!properties)return;
+    renderDetails.call(this,panel);const item=this.selectedItem(),properties=panel.querySelector('.sien-properties');if(this.app.supportsAttachments===false||!item||!properties)return;
     const definition={key:'sienAttachments',name:'파일',type:'files'},row=properties.createDiv({cls:'sien-property-row sien-attachment-property'});
     row.dataset.propertyType='files';
     const label=row.createEl('button',{cls:'sien-property-label is-editable',attr:{type:'button','aria-label':'파일 속성 배치','aria-haspopup':'menu'}});
@@ -28705,7 +28716,7 @@ function installProjectTools(deps){
       const v=this.view,data=collectResources(v.projectMemberItems(this.project.id),v.plugin.allProperties());this.contentEl.empty();const heading=this.contentEl.createDiv({cls:'sien-resource-sidebar-heading'});heading.createEl('h2',{text:this.project.name});const close=button(heading,'',()=>this.close(),'sien-icon-button');close.setAttribute('aria-label','자료 닫기');setIcon(close,'x');
       const tabs=this.contentEl.createDiv({cls:'sien-project-resource-tabs',attr:{role:'tablist','aria-label':'자료 종류'}}),controls=new Map(),panel=this.contentEl.createDiv({cls:'sien-project-tools-body sien-project-resource-panel',attr:{role:'tabpanel',tabindex:'0',id:v.sidebarDomId+'-resource-panel'}});
       const source=(parent,item)=>button(parent,item.title||'이름 없음',()=>{const anchor=v.contentEl.querySelector(`.sien-project-node[data-sien-item-id="${CSS.escape(String(itemUiId(item)))}"]`)||v.contentEl.querySelector('.sien-project-toolbar');v.openDetailPopover(item,anchor);},'sien-project-resource-source');
-      const kinds=[['links','링크'],['notes','메모'],['files','파일']];
+      const kinds=[['links','링크'],['notes','메모'],...(v.app.supportsAttachments===false?[]:[['files','파일']])];
       const activate=kind=>{
         if(panel.dataset.activeKind)this.scrolls[panel.dataset.activeKind]=panel.scrollTop;this.activeKind=kind;panel.dataset.activeKind=kind;panel.empty();
         for(const[key,tab]of controls){tab.setAttribute('aria-selected',String(key===kind));tab.tabIndex=key===kind?0:-1;}

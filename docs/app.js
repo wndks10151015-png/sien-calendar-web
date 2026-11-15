@@ -7,10 +7,10 @@ import {pushOverlay,removeOverlay} from "./navigation.js";
 
 const sync=new GitHubSync(),root=document.getElementById("calendar");
 let app,plugin,booting;
-const mobile=()=>document.body.classList.toggle("is-mobile",matchMedia("(pointer:coarse)").matches||innerWidth<600);
+const mobile=()=>document.body.classList.toggle("is-mobile",innerWidth<600||(innerWidth<=1100&&matchMedia("(pointer:coarse)").matches));
 mobile();addEventListener("resize",mobile);
 if(localStorage.getItem("sien-theme")==="light"){document.body.classList.replace("theme-dark","theme-light");}
-setIcon(document.getElementById("web-theme"),"sun-moon");setIcon(document.getElementById("web-files"),"paperclip");setIcon(document.getElementById("web-settings"),"settings");
+setIcon(document.getElementById("web-theme"),"sun-moon");setIcon(document.getElementById("web-settings"),"settings");
 sync.addEventListener("status",()=>{document.getElementById("web-sync-label").textContent=sync.status;document.getElementById("web-sync").dataset.state=sync.state;});
 async function refresh(){if(plugin)await plugin.onExternalSettingsChange();}
 addEventListener("calendar-document-saved",event=>{if(event.detail?.remote)void refresh();});
@@ -157,12 +157,6 @@ sync.setConflictResolver(conflicts=>new Promise(resolve=>{
 document.getElementById("web-sync").addEventListener("click",()=>void connectionDialog());
 document.getElementById("web-theme").addEventListener("click",()=>{const light=document.body.classList.contains("theme-dark");document.body.classList.toggle("theme-dark",!light);document.body.classList.toggle("theme-light",light);localStorage.setItem("sien-theme",light?"light":"dark");document.getElementById("web-theme").setAttribute("aria-label",light?"어두운 테마로 변경":"밝은 테마로 변경");});
 document.getElementById("web-settings").addEventListener("click",()=>{if(!plugin)return;const modal=dialog("캘린더 설정");app.settingTab.containerEl=modal.contentEl.createDiv();app.settingTab.display();modal.open();});
-document.getElementById("web-files").addEventListener("click",()=>{
-  if(!app)return;const modal=dialog("이 기기의 파일");
-  modal.contentEl.createEl("p",{text:"첨부파일은 현재 이 기기에만 보관됩니다. 원본 보관함 파일을 자동으로 읽지 않으며 기기 간 파일 동기화는 아직 지원하지 않습니다."});
-  const input=modal.contentEl.createEl("input",{type:"file",attr:{multiple:"true","aria-label":"파일 추가"}});
-  input.addEventListener("change",async()=>{for(const file of input.files)await app.registerFile(file);input.value="";});modal.open();
-});
 addEventListener("pagehide",()=>{void plugin?.flushOpenDetailSaves().catch(()=>{});});
 if(navigator.storage?.persist)navigator.storage.persist().catch(()=>{});
 const settings=await sync.initialize(),vault=await readState("credential");
