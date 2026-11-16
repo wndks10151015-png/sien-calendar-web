@@ -6,7 +6,12 @@ function sort(value) {
 }
 const object=value=>value!==null&&typeof value==="object"&&!Array.isArray(value);
 const clone=value=>value===undefined?undefined:structuredClone(value);
-const keyedViews=value=>Array.isArray(value)&&value.every(v=>object(v)&&typeof v.id==="string"&&v.id.length>0)&&new Set(value.map(v=>v.id)).size===value.length;
+const keyedEntries=(value,key)=>Array.isArray(value)&&value.every(v=>object(v)&&typeof v[key]==='string'&&v[key].length>0)&&new Set(value.map(v=>v[key])).size===value.length;
+export function isPristineDocument(document){
+  const ignored=new Set(['schemaVersion','migration','updatedAt','_updatedAt','modified','revision','_revision','configUpdatedAt','configRevision','commitId','_commitId']);
+  const hasValue=value=>value!=null&&(typeof value==='object'?Array.isArray(value)?value.length>0:Object.values(value).some(hasValue):true);
+  return !Object.entries(document).some(([key,value])=>!ignored.has(key)&&(key.startsWith('item:')||hasValue(value)));
+}
 export function mergeDocuments(base,local,remote) {
   const conflicts=[];
   function merge(b,l,r,path) {
@@ -16,14 +21,19 @@ export function mergeDocuments(base,local,remote) {
     const key=path.at(-1);
     if(["updatedAt","_updatedAt","modified","configUpdatedAt","_commitId","commitId"].includes(key)&&[l,r].every(v=>typeof v==="string"))return l>r?l:r;
     if(["revision","_revision","configRevision"].includes(key)&&[l,r].every(Number.isFinite))return Math.max(l,r)+1;
-    if(path.length===2&&path[0]==="config"&&key==="savedViews"&&keyedViews(l)&&keyedViews(r)&&(b===undefined||keyedViews(b))){
-      const ids=v=>(v||[]).map(entry=>entry.id),common=ids(b).filter(id=>l.some(v=>v.id===id)&&r.some(v=>v.id===id));
+    const collectionKey=path.length===2&&path[0]==='config'?(key==='customProperties'?'key':['savedViews','databases','externalCalendars'].includes(key)?'id':null):null;
+    if(collectionKey&&keyedEntries(l,collectionKey)&&keyedEntries(r,collectionKey)&&(b===undefined||keyedEntries(b,collectionKey))){
+      const ids=v=>(v||[]).map(entry=>entry[collectionKey]),common=ids(b).filter(id=>l.some(v=>v[collectionKey]===id)&&r.some(v=>v[collectionKey]===id));
       const order=v=>ids(v).filter(id=>common.includes(id)),localOrder=order(l),remoteOrder=order(r);
       const localMoved=canonical(localOrder)!==canonical(common),remoteMoved=canonical(remoteOrder)!==canonical(common);
       if(!(localMoved&&remoteMoved&&canonical(localOrder)!==canonical(remoteOrder))){
         const preferred=localMoved&&!remoteMoved?l:r,other=preferred===l?r:l;
-        return [...new Set([...ids(preferred),...ids(other)])].map(id=>merge(b?.find(v=>v.id===id),l.find(v=>v.id===id),r.find(v=>v.id===id),[...path,"@"+id])).filter(v=>v!==undefined);
+        return [...new Set([...ids(preferred),...ids(other)])].map(id=>merge(b?.find(v=>v[collectionKey]===id),l.find(v=>v[collectionKey]===id),r.find(v=>v[collectionKey]===id),[...path,"@"+id])).filter(v=>v!==undefined);
       }
+    }
+    if(key==='options'&&path[0]==='config'&&path[1]==='customProperties'&&[l,r].every(a=>Array.isArray(a)&&a.every(v=>typeof v==='string')&&new Set(a).size===a.length)&&(b===undefined||Array.isArray(b))&&(b||[]).every(v=>l.includes(v)&&r.includes(v))){
+      const common=b||[],order=a=>a.filter(v=>common.includes(v)),lo=order(l),ro=order(r);
+      if(!(canonical(lo)!==canonical(common)&&canonical(ro)!==canonical(common)&&canonical(lo)!==canonical(ro)))return [...new Set([...r,...l])];
     }
     if(object(l)&&object(r)&&(object(b)||b===undefined)){
       const result={};
@@ -40,10 +50,11 @@ export function mergeDocuments(base,local,remote) {
 }
 export function resolveConflict(document,path,value){
   let parent=document;
-  for(const key of path.slice(0,-1))parent=Array.isArray(parent)?parent.find(v=>v.id===key.slice(1)):parent[key];
+  const find=(array,key)=>array.findIndex(v=>v.id===key.slice(1)||v.key===key.slice(1));
+  for(const key of path.slice(0,-1))parent=Array.isArray(parent)?parent[find(parent,key)]:parent[key];
   const key=path.at(-1);
   if(Array.isArray(parent)){
-    const index=parent.findIndex(v=>v.id===key.slice(1));
+    const index=find(parent,key);
     if(value===undefined){if(index>=0)parent.splice(index,1);}
     else if(index<0)parent.push(clone(value));else parent[index]=clone(value);
   }else if(value===undefined)delete parent[key];

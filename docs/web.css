@@ -23,3 +23,8 @@ body.sien-web .sien-canvas-connections .sien-project-edges path.is-hovered:not(.
 body.sien-web .sien-canvas-connections .sien-project-node.is-connection-selected{outline:1px solid var(--project-outline,var(--project-color));outline-offset:3px}
 body.sien-web .sien-project-connection-hint{pointer-events:none}
 body.sien-web .sien-canvas-connections .sien-project-edges .is-reconnecting,body.sien-web .sien-canvas-connections.is-connecting .sien-project-edge-endpoint{opacity:0;pointer-events:none}
+body.sien-web #web-sync:is([data-state=pending],[data-state=offline],[data-state=locked]) .web-sync-dot{background:var(--color-orange)}
+.web-conflict-value{max-height:180px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.5;padding:8px;background:var(--background-secondary)}
+.web-conflict-row details{margin:6px 0;color:var(--text-muted);font-size:12px}
+.web-session-warning{display:flex;flex:none;align-items:center;justify-content:space-between;gap:8px;padding:5px 10px;border-bottom:1px solid var(--color-orange);font-size:12px;line-height:1.4;color:var(--text-normal);background:var(--background-secondary)}
+.web-session-warning button{flex:none;font-size:12px;min-height:30px;padding:3px 8px}

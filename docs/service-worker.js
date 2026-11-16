@@ -1,6 +1,6 @@
 const ROOT=new URL("./",self.location).pathname;
 const PREFIX="sien-calendar:"+ROOT+":";
-const CACHE=PREFIX+"web-0.1.7";
+const CACHE=PREFIX+"web-0.1.8";
 const FILES=["./","./index.html","./app.js","./host.js","./navigation.js","./store.js","./sync.js","./merge.js","./view-state.js","./layout.js","./project-connections.js","./calendar-engine.js","./calendar.css","./theme.css","./web.css","./icon.svg","./manifest.webmanifest","./assets/lucide.js","./assets/fonts/PretendardVariable.woff2"];
 FILES.push("./assets/icon-192.png","./assets/icon-512.png");
 const ASSETS=new Set(FILES.map(file=>new URL(file,self.location).pathname));

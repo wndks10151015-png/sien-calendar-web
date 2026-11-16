@@ -55,3 +55,18 @@ test("independent saved-view additions and deletions preserve other views",()=>{
   const l=structuredClone(b),r=structuredClone(b);l.config.savedViews.pop();r.config.savedViews.push({id:"new",name:"New"});
   const m=mergeDocuments(b,l,r);assert.deepEqual(m.conflicts,[]);assert.deepEqual(m.document.config.savedViews.map(v=>v.id),["all","new"]);
 });
+
+test('independent custom-property changes merge by key instead of blocking the whole collection',()=>{
+ const b=base();b.config.customProperties=[{key:'project',name:'프로젝트',options:['old'],optionColors:{old:'#111111'}},{key:'notes',name:'메모'}];
+ const l=structuredClone(b),r=structuredClone(b);l.config.customProperties[0].options.push('new-project');r.config.customProperties[1].name='업무 메모';
+ const m=mergeDocuments(b,l,r);assert.deepEqual(m.conflicts,[]);assert.ok(m.document.config.customProperties[0].options.includes('new-project'));assert.equal(m.document.config.customProperties[1].name,'업무 메모');
+});
+test('two independently added project options both survive',()=>{
+ const b=base();b.config.customProperties=[{key:'project',options:['old'],optionLabels:{old:'Old'}}];
+ const l=structuredClone(b),r=structuredClone(b);l.config.customProperties[0].options.push('a');l.config.customProperties[0].optionLabels.a='A';r.config.customProperties[0].options.push('b');r.config.customProperties[0].optionLabels.b='B';
+ const m=mergeDocuments(b,l,r);assert.deepEqual(m.conflicts,[]);assert.deepEqual(new Set(m.document.config.customProperties[0].options),new Set(['old','a','b']));
+});
+test('custom-property deletion versus editing stays an explicit conflict',()=>{
+ const b=base();b.config.customProperties=[{key:'one',name:'Original'}];const l=structuredClone(b),r=structuredClone(b);l.config.customProperties=[];r.config.customProperties[0].name='Edited';
+ const m=mergeDocuments(b,l,r);assert.equal(m.conflicts.length,1);assert.deepEqual(m.conflicts[0].path,['config','customProperties','@one']);
+});
