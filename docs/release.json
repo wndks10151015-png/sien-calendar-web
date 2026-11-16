@@ -1,8 +1,8 @@
 {
-  "version": "0.1.9",
+  "version": "0.1.10",
   "assets": {
-    "index.html": "82d768b56e0f828ad499578186a4bcd5c0590f53a3a15a8f101f6d5098fadf63",
-    "boot.js": "5ae582c6e7231cdfad908ec7bb4269828cdc31b18186d681912411b00bafe4d5",
+    "index.html": "a973809c8c287f07e1f256b4fed9083bb8f1292eef42c446afa8ea160ab9a805",
+    "boot.js": "c138d0153bc4e517e32fc77aa2bedbd8c3dc379715bb96b956d94f1d41a195b4",
     "app.js": "80e7901eaa1cbb4644a48da1155b22c071826141b482310a9362896620aa514c",
     "host.js": "d7f8394ca5d87f730f828ca6540be4f3c2cc1e8d26a07089b5bc66ce86b82077",
     "navigation.js": "e47e7ff36853314e053ce9de58e55d300e85a03a1f7d27ffc93994102360ea43",
