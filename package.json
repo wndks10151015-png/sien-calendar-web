@@ -1,11 +1,12 @@
 {
   "name": "sien-calendar-web",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "node scripts/serve.cjs",
     "test": "node --test tests/*.test.js",
-    "check:public": "node scripts/check-public.cjs"
+    "check:public": "node scripts/check-public.cjs",
+    "release": "node scripts/release.cjs"
   }
 }

@@ -29,6 +29,8 @@ export class GitHubSync extends EventTarget {
   setStatus(state,text){this.state=state;this.status=text;this.dispatchEvent(new Event("status"));}
   async initialize(){this.#settings=await readState("connection");const base=await readState('sync-base'),local=await readDocument();this.#dirty=base?canonical(sharedDocument(local,base))!==canonical(sharedDocument(base)):!isPristineDocument(sharedDocument(local));return this.#settings;}
   get connected(){return !!this.#token;}
+  get busy(){return !!this.#busy||this.#connecting;}
+  sessionForUpdate(){return this.#token?{token:this.#token,connection:this.connection}:null;}
   get hasPendingUpload(){return this.#dirty;}
   get connection(){return this.#settings?{...this.#settings}:null;}
   setConflictResolver(resolve){this.#resolver=resolve;}

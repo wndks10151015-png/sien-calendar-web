@@ -151,7 +151,7 @@ async function connectionDialog({reset=false}={}){
   const extra=modal.contentEl.createDiv({cls:"web-secondary-actions"});
   button(extra,"일정 내보내기",exportData);button(extra,"JSON 가져오기",importData);if(plugin)button(extra,"ICS 가져오기",importIcs);
   recoveryButton=button(extra,'복구본 내보내기',()=>void exportRecovery());await updateRecovery();
-  if(plugin)button(extra,"토큰 잠금",()=>{sync.lock();modal.close();location.reload();});
+  if(plugin)button(extra,"토큰 잠금",()=>{window.calendarUpdates?.forgetSession();sync.lock();modal.close();location.reload();});
   modal.open();
 }
 sync.setConflictResolver(conflicts=>new Promise(resolve=>{
@@ -177,8 +177,18 @@ addEventListener('beforeunload',event=>{
 addEventListener("pagehide",()=>{void plugin?.flushOpenDetailSaves().catch(()=>{});});
 if(navigator.storage?.persist)navigator.storage.persist().catch(()=>{});
 const settings=await sync.initialize(),vault=await readState("credential");
+const resumed=await window.calendarUpdates?.takeSession();
 sync.setStatus(settings?"locked":"local",settings&&vault?"잠금 해제":settings?'다시 로그인 필요 · 기기에 저장':sync.hasPendingUpload?'미연결 · 이 기기에만 저장':"GitHub 연결");
-if(settings&&vault){
+if(resumed?.token&&JSON.stringify(resumed.connection)===JSON.stringify(settings)){
+  await sync.unlock(resumed.token);await startCalendar();
+}else if(settings&&vault){
   root.replaceChildren();const lock=root.createDiv({cls:"web-locked"}),content=lock.createDiv();content.createEl("p",{text:"저장된 캘린더 연결을 잠금 해제해 주세요."});button(content,"잠금 해제",()=>void connectionDialog(),true);void connectionDialog();
 }else {await startCalendar();if(settings)void connectionDialog();}
-if("serviceWorker" in navigator&&!location.hostname.match(/^(127\.0\.0\.1|localhost)$/))navigator.serviceWorker.register("./service-worker.js",{scope:"./"}).catch(()=>new Notice("오프라인 앱 캐시를 준비하지 못했습니다. 온라인 상태에서 다시 열어 주세요."));
+window.calendarUpdates?.setSessionProvider(()=>sync.sessionForUpdate());
+window.calendarUpdates?.setGuard(async()=>{
+  const view=window.calendarApp?.view;
+  if(view&&(view.pendingDetailItems?.size||view.detailSaveTimer||view.detailSaveInFlight||view.draftPersistTimer||view.inlineSaveQueues?.size||view.draftCompositionActive))return false;
+  if(sync.busy||sync.connection&&sync.hasPendingUpload)return false;
+  await Promise.allSettled([...(plugin?.writeQueues?.values?.()||[])]);await plugin?.dataSaveQueue;
+  return !sync.busy&&!(sync.connection&&sync.hasPendingUpload);
+});
